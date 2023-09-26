@@ -1,0 +1,53 @@
+<?php
+/** @var \Freento\AuditModuleList\Block\Adminhtml\Report $block */
+/** @var Magento\Framework\Escaper $escaper */
+?>
+<div class="freento-auditmodulelist-report-grid report-data">
+    <div class="report-description">
+        <p>
+            <?= $escaper->escapeHtml(
+                __(
+                    'This report lists all installed modules except the core Magento modules and Freento Audit '
+                    . 'Report module.'
+                )
+            ) ?>
+        </p>
+        <p>
+            <?= // @noEscape
+            __(
+                'Modules highlighted with the <img src="%img_link" alt="green arrow" class="green-arrow"> '
+                . 'icon can be upgraded to their latest version to keep your store’s codebase up-to-date.',
+                ['img_link' => $block->getViewFileUrl('Freento_AuditModuleList/img/update.svg')]
+            ) ?>
+        </p>
+    </div>
+    <table class="data-grid">
+        <tr>
+            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Name')) ?></th>
+            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Current version')) ?></th>
+            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Latest version')) ?></th>
+            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Installation type')) ?></th>
+            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Status')) ?></th>
+        </tr>
+        <?php /** @var \Freento\AuditModuleList\Api\Data\ModuleInterface $module */ ?>
+        <?php foreach ($block->getModuleList() as $module): ?>
+            <?php $status = $module->getStatus(); ?>
+            <?php $statusCssClass = $block->getStatusCssClass($status); ?>
+            <tr <?= $status !== \Freento\AuditModuleList\Model\Module::STATUS_ENABLED
+                ? 'class="' . $escaper->escapeHtmlAttr($statusCssClass) . '"' : '' ?>>
+                <td><?= $escaper->escapeHtml($module->getName()) ?></td>
+                <td><?= $escaper->escapeHtml($module->getVersion()) ?></td>
+                <?php $updateAvailable = $block->isUpdateAvailable($module) ?>
+                <td <?= $updateAvailable
+                    ? 'class="update-available" title="' . $escaper->escapeHtmlAttr(
+                        __('This module can be updated')
+                    ) . '"'
+                    : '' ?>>
+                    <?= $escaper->escapeHtml($module->getLatestVersion()) ?>
+                </td>
+                <td><?= $escaper->escapeHtml($module->getInstallationType()) ?></td>
+                <td><?= $escaper->escapeHtml(__($block->getStatusCaption($status))) ?></td>
+            </tr>
+        <?php endforeach; ?>
+    </table>
+</div>
