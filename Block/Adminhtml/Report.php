@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Freento\AuditModuleList\Block\Adminhtml;
 
+use Composer\Package\Version\VersionParser;
 use Freento\AuditModuleList\Api\Data\ModuleInterface;
 use Freento\AuditModuleList\Model\Module;
 use Freento\AuditModuleList\Model\ModuleRepository;
@@ -96,20 +97,8 @@ class Report extends Template
      */
     public function isUpdateAvailable(ModuleInterface $module): bool
     {
-        $pattern = '/(\.0)+([-+\w].*)?$/';
-        $replacement = '$2';
-
-        $current = preg_replace(
-            $pattern,
-            $replacement,
-            str_replace(' (setup_version)', '', $module->getVersion())
-        );
-        $latest = preg_replace(
-            $pattern,
-            $replacement,
-            $module->getLatestVersion()
-        );
-
+        $current = $module->getVersion();
+        $latest = $module->padLatestVersion();
         if ($current === ModuleInterface::VERSION_NOT_FOUND || $latest === ModuleInterface::PARAMETER_N_A) {
             return false;
         }

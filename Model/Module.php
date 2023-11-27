@@ -187,7 +187,7 @@ class Module extends DataObject implements ModuleInterface
                     throw new CannotReadXmlException(__($xmlExceptionMessage, $path));
                 }
                 if (isset($xmlContent->module['name'])) {
-                        $name = (string)$xmlContent->module['name'];
+                    $name = (string)$xmlContent->module['name'];
                 } else {
                     throw new NoPropertyException(__($propertyNotFoundMessage, 'name', $path));
                 }
@@ -207,7 +207,7 @@ class Module extends DataObject implements ModuleInterface
      */
     private function isStable(BasePackage $module): bool
     {
-        return (string) $module->getStability() === 'stable';
+        return (string)$module->getStability() === 'stable';
     }
 
     /**
@@ -241,7 +241,7 @@ class Module extends DataObject implements ModuleInterface
             $composerExceptionMessage = self::COMPOSER_FILE_NOT_EXIST_MESSAGE;
             throw new CantCreateComposerInstanceException(
                 __($composerExceptionMessage, $documentRoot
-                . self::COMPOSER_PATH)
+                    . self::COMPOSER_PATH)
             );
         }
 
@@ -282,8 +282,8 @@ class Module extends DataObject implements ModuleInterface
             $maxVersion = self::MAX_VERSION;
             foreach ($composerModulesList as $composerModule) {
                 if (isset($composerModule)) {
-                    if ($composerModule->getVersion() > $maxVersion) {
-                        $maxVersion = $composerModule->getVersion();
+                    if (version_compare($composerModule->getPrettyVersion(), $maxVersion, '>')) {
+                        $maxVersion = $composerModule->getPrettyVersion();
                     }
                 }
             }
@@ -528,5 +528,48 @@ class Module extends DataObject implements ModuleInterface
     private function fileBuildPath(string ...$segments): string
     {
         return DIRECTORY_SEPARATOR . join(DIRECTORY_SEPARATOR, $segments);
+    }
+
+    /**
+     * Pads latest version number to the length of current version number without losing important digits
+     *
+     * @return string
+     */
+    public function padLatestVersion(): string
+    {
+        $latest = $this->getLatestVersion();
+        if ($latest === ModuleInterface::PARAMETER_N_A) {
+            return $latest;
+        }
+
+        $current = preg_replace(['/ (setup_version)/', '/^v/'], '', $this->getVersion());
+        $pattern = '/(\d+(\.\d+)+)([-+\w].*)?/';
+        if (!preg_match($pattern, $current, $currentMatches) || !preg_match($pattern, $latest, $latestMatches)) {
+            return $latest;
+        }
+
+        if (!isset($currentMatches[1]) || !isset($latestMatches[1])) {
+            return $latest;
+        }
+
+        $currentParts = explode('.', $currentMatches[1]);
+        $latestParts = explode('.', $latestMatches[1]);
+
+        $digitsInCurrent = count($currentParts);
+        $digitsInLatest = count($latestParts);
+        if ($digitsInCurrent < $digitsInLatest) {
+            for ($i = array_key_last($latestParts); $i > array_key_last($currentParts); $i--) {
+                if ($latestParts[$i] === '0') {
+                    unset($latestParts[$i]);
+                } else {
+                    break;
+                }
+            }
+        } elseif ($digitsInCurrent > $digitsInLatest) {
+            $latestParts = array_pad($latestParts, $digitsInCurrent, '0');
+        }
+        $latestMatches[1] = implode('.', $latestParts);
+
+        return $latestMatches[1] . ($latestMatches[3] ?? '');
     }
 }

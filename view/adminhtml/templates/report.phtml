@@ -43,7 +43,7 @@
                         __('This module can be updated')
                     ) . '"'
                     : '' ?>>
-                    <?= $escaper->escapeHtml($module->getLatestVersion()) ?>
+                    <?= $escaper->escapeHtml($module->padLatestVersion()) ?>
                 </td>
                 <td><?= $escaper->escapeHtml($module->getInstallationType()) ?></td>
                 <td><?= $escaper->escapeHtml(__($block->getStatusCaption($status))) ?></td>
