@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace Freento\AuditModuleList\Model;
 
 use Composer\Downloader\TransportException;
-use Composer\IO\NullIO;
 use Composer\Package\BasePackage;
-use Composer\Util\Platform;
 use Composer\Json\JsonValidationException;
-use Exception;
+use Composer\Repository\ArtifactRepository;
+use Composer\Repository\FilterRepository;
 use Freento\AuditModuleList\Api\Data\ModuleInterface;
 use Freento\AuditModuleList\Exception\ModulesConfigNotFoundException;
 use Magento\Framework\App\DeploymentConfig\Reader;
@@ -28,10 +27,10 @@ use Freento\AuditModuleList\Exception\NoDocumentRootException;
 use Freento\AuditModuleList\Exception\CannotReadXmlException;
 use Freento\AuditModuleList\Exception\CantCreateComposerInstanceException;
 use Freento\AuditModuleList\Exception\ModuleNotRegisteredException;
-use Freento\AuditModuleList\Exception\WrongRepoLinkException;
 use Magento\Composer\MagentoComposerApplicationFactory as Factory;
 use Magento\Framework\Filesystem\DirectoryList;
 use Magento\Framework\Exception\LocalizedException;
+use Psr\Log\LoggerInterface;
 
 class Module extends DataObject implements ModuleInterface
 {
@@ -43,7 +42,6 @@ class Module extends DataObject implements ModuleInterface
     private const CAN_NOT_READ_XML_MESSAGE = 'Can not read xml file at %1';
     private const COMPOSER_FILE_NOT_EXIST_MESSAGE = 'Can not create composer in %1 : file not exist or corrupted';
     private const MODULE_NOT_REGISTERED_ERROR_MESSAGE = 'Module with name %1 not found or not registered';
-    private const WRONG_REPO_LINK_ERROR_MESSAGE = 'Wrong repository link: %1';
     private const STATUS = 'status';
 
     public const STATUS_DISABLED = 0;
@@ -91,14 +89,19 @@ class Module extends DataObject implements ModuleInterface
     private Reader $reader;
 
     /**
+     * @var LoggerInterface
+     */
+    private LoggerInterface $logger;
+
+    /**
      * @param FullModuleList $fullModuleList
      * @param Dir $dir
      * @param File $driver
      * @param Factory $composerFactory
      * @param DirectoryList $directoryList
      * @param Reader $reader
+     * @param LoggerInterface $logger
      * @param array $data
-     * @throws Exception
      */
     public function __construct(
         FullModuleList $fullModuleList,
@@ -107,6 +110,7 @@ class Module extends DataObject implements ModuleInterface
         Factory $composerFactory,
         DirectoryList $directoryList,
         Reader $reader,
+        LoggerInterface $logger,
         array $data = []
     ) {
         $this->fullModuleList = $fullModuleList;
@@ -115,6 +119,7 @@ class Module extends DataObject implements ModuleInterface
         $this->composerFactory = $composerFactory;
         $this->directoryList = $directoryList;
         $this->reader = $reader;
+        $this->logger = $logger;
         parent::__construct($data);
     }
 
@@ -130,7 +135,7 @@ class Module extends DataObject implements ModuleInterface
     private function getModuleStatus(string $moduleName): int
     {
         if (!empty(self::$modulesStatus)) {
-            return self::$modulesStatus[$moduleName];
+            return self::$modulesStatus[$moduleName] ?? self::STATUS_UNKNOWN;
         }
 
         $currentConfig = $this->reader->load(ConfigFilePool::APP_CONFIG);
@@ -142,20 +147,19 @@ class Module extends DataObject implements ModuleInterface
         self::$modulesStatus = array_filter(self::$modulesStatus, [$this, 'nonMagentoModule'], ARRAY_FILTER_USE_KEY);
         self::$modulesStatus = array_filter(self::$modulesStatus, [$this, 'nonFreentoAudit'], ARRAY_FILTER_USE_KEY);
 
-        return self::$modulesStatus[$moduleName];
+        return self::$modulesStatus[$moduleName] ?? self::STATUS_UNKNOWN;
     }
 
     /**
-     * Get module name
+     * Get composer module name
      *
      * @param string $module
      * @return string
      * @throws FileSystemException
-     * @throws NoPropertyException
-     * @throws CannotReadXmlException
      * @throws ModuleNotRegisteredException
+     * @throws NoPropertyException
      */
-    private function getModuleName(string $module): string
+    private function getComposerModuleName(string $module): string
     {
         // Constants are not allowed in translate function
         $composerPath = self::COMPOSER_PATH;
@@ -178,22 +182,7 @@ class Module extends DataObject implements ModuleInterface
                 );
             }
         } else {
-            $path = $path . $this->fileBuildPath('etc', 'module.xml');
-            $xmlExceptionMessage = self::CAN_NOT_READ_XML_MESSAGE;
-            if ($this->driver->isExists($path)) {
-                try {
-                    $xmlContent = simplexml_load_string($this->driver->fileGetContents($path));
-                } catch (FileSystemException $e) {
-                    throw new CannotReadXmlException(__($xmlExceptionMessage, $path));
-                }
-                if (isset($xmlContent->module['name'])) {
-                    $name = (string)$xmlContent->module['name'];
-                } else {
-                    throw new NoPropertyException(__($propertyNotFoundMessage, 'name', $path));
-                }
-            } else {
-                $name = self::PARAMETER_N_A;
-            }
+            $name = self::PARAMETER_N_A;
         }
 
         return $name;
@@ -222,6 +211,10 @@ class Module extends DataObject implements ModuleInterface
      */
     public function getLatestModuleVersion(string $composerModuleName): string
     {
+        if ($composerModuleName === self::PARAMETER_N_A) {
+            return self::PARAMETER_N_A;
+        }
+
         $documentRoot = $this->directoryList->getRoot();
 
         $noDocumentRootException = self::DOCUMENT_ROOT_NOT_FOUND_MESSAGE;
@@ -251,10 +244,12 @@ class Module extends DataObject implements ModuleInterface
         }
 
         $composerModulesList = [];
+        $repoFailed = false;
         foreach ($repositories as $repo) {
             if (isset($repo)) {
                 try {
-                    if (isset($repo->getRepoConfig()['type']) && $repo->getRepoConfig()['type'] === 'artifact') {
+                    $originalRepo = $repo instanceof FilterRepository ? $repo->getRepository() : $repo;
+                    if ($originalRepo instanceof ArtifactRepository) {
                         // phpcs:disable Magento2.Functions.DiscouragedFunction
                         $cwd = getcwd();
                         chdir($documentRoot);
@@ -265,8 +260,9 @@ class Module extends DataObject implements ModuleInterface
                         $composerModulesList = $repo->findPackages($composerModuleName);
                     }
                 } catch (TransportException $e) {
-                    $wrongRepoMessage = self::WRONG_REPO_LINK_ERROR_MESSAGE;
-                    throw new WrongRepoLinkException(__($wrongRepoMessage, $repo->getRepoName()));
+                    $repoFailed = true;
+                    $this->logger->error($e->getMessage());
+                    continue;
                 }
 
                 if (!empty($composerModulesList)) {
@@ -287,6 +283,8 @@ class Module extends DataObject implements ModuleInterface
                     }
                 }
             }
+        } elseif ($repoFailed) {
+            $maxVersion = ModuleInterface::VERSION_ERROR_MESSAGE;
         }
 
         return $maxVersion;
@@ -349,7 +347,7 @@ class Module extends DataObject implements ModuleInterface
         $defaultVersion = self::PARAMETER_N_A;
         $version = $defaultVersionTranslated = __($defaultVersion);
 
-        $composerModuleName = $this->getModuleName($moduleName);
+        $composerModuleName = $this->getComposerModuleName($moduleName);
         $latestVersion = $this->getLatestModuleVersion($composerModuleName);
 
         $path = $this->dir->getDir($moduleName);
@@ -404,7 +402,7 @@ class Module extends DataObject implements ModuleInterface
         $this->setVersion((string)$version);
         $this->setLatestVersion($latestVersion);
         $this->setInstallationType($installationType);
-        $this->setStatus($this->getModuleStatus($moduleName) ?? self::STATUS_UNKNOWN);
+        $this->setStatus($this->getModuleStatus($moduleName));
     }
 
     /**
@@ -538,7 +536,7 @@ class Module extends DataObject implements ModuleInterface
     public function padLatestVersion(): string
     {
         $latest = $this->getLatestVersion();
-        if ($latest === ModuleInterface::PARAMETER_N_A) {
+        if ($latest === ModuleInterface::PARAMETER_N_A || $latest === ModuleInterface::VERSION_ERROR_MESSAGE) {
             return $latest;
         }
 

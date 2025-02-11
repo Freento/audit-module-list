@@ -99,7 +99,9 @@ class Report extends Template
     {
         $current = $module->getVersion();
         $latest = $module->padLatestVersion();
-        if ($current === ModuleInterface::VERSION_NOT_FOUND || $latest === ModuleInterface::PARAMETER_N_A) {
+        if ($current === ModuleInterface::VERSION_NOT_FOUND ||
+            $latest === ModuleInterface::PARAMETER_N_A ||
+            $latest === ModuleInterface::VERSION_ERROR_MESSAGE) {
             return false;
         }
 

@@ -1,6 +1,7 @@
 @color-unknown-module: #f00;
 @color-update-available: #228b22;
 @color-disabled-module: #808080;
+@color-version-error: @color-unknown-module;
 
 .freento-auditmodulelist-report-grid {
     tr.module-disabled td {
@@ -17,13 +18,19 @@
         color: @color-unknown-module;
     }
 
-    tr td.update-available {
-        color: @color-update-available;
+    tr td {
+        &.update-available {
+            color: @color-update-available;
 
-        &:after {
-            content: url('@{baseDir}Freento_AuditModuleList/img/update.svg');
-            display: inline-block;
-            .green-arrow();
+            &:after {
+                content: url('@{baseDir}Freento_AuditModuleList/img/update.svg');
+                display: inline-block;
+                .green-arrow();
+            }
+        }
+
+        &.version-error {
+            color: @color-version-error;
         }
     }
 }

@@ -17,6 +17,7 @@ interface ModuleInterface
     public const COMPOSER_PATH = DIRECTORY_SEPARATOR . 'composer.json';
     public const COMPOSER_LOCK_PATH = DIRECTORY_SEPARATOR . 'composer.lock';
     public const MAX_VERSION = '0';
+    public const VERSION_ERROR_MESSAGE = 'Unable to retrieve version';
 
     /**
      * Puts all necessary data in the Module model: Module name, version, latest version

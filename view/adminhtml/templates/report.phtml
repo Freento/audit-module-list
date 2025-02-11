@@ -16,7 +16,7 @@
             <?= // @noEscape
             __(
                 'Modules highlighted with the <img src="%img_link" alt="green arrow" class="green-arrow"> '
-                . 'icon can be upgraded to their latest version to keep your store’s codebase up-to-date.',
+                . 'icon can be upgraded to their latest version to keep your store\'s codebase up-to-date.',
                 ['img_link' => $block->getViewFileUrl('Freento_AuditModuleList/img/update.svg')]
             ) ?>
         </p>
@@ -38,12 +38,14 @@
                 <td><?= $escaper->escapeHtml($module->getName()) ?></td>
                 <td><?= $escaper->escapeHtml($module->getVersion()) ?></td>
                 <?php $updateAvailable = $block->isUpdateAvailable($module) ?>
+                <?php $latest = $module->padLatestVersion() ?>
                 <td <?= $updateAvailable
                     ? 'class="update-available" title="' . $escaper->escapeHtmlAttr(
                         __('This module can be updated')
                     ) . '"'
-                    : '' ?>>
-                    <?= $escaper->escapeHtml($module->padLatestVersion()) ?>
+                    : ($latest === \Freento\AuditModuleList\Api\Data\ModuleInterface::VERSION_ERROR_MESSAGE
+                    ? 'class="version-error"' : '') ?>>
+                    <?= $escaper->escapeHtml($latest) ?>
                 </td>
                 <td><?= $escaper->escapeHtml($module->getInstallationType()) ?></td>
                 <td><?= $escaper->escapeHtml(__($block->getStatusCaption($status))) ?></td>

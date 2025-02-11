@@ -1,4 +1,9 @@
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
     <preference for="Freento\AuditModuleList\Api\ModuleRepositoryInterface" type="Freento\AuditModuleList\Model\ModuleRepository" />
     <preference for="Freento\AuditModuleList\Api\Data\ModuleInterface" type="Freento\AuditModuleList\Model\Module" />
+    <type name="Freento\AuditModuleList\Model\Module">
+        <arguments>
+            <argument name="logger" xsi:type="object">Freento\AuditReport\Logger\Audit</argument>
+        </arguments>
+    </type>
 </config>
